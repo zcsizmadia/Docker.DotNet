@@ -36,6 +36,18 @@ internal sealed class StandardStreamResponse : Stream
         set => _stream.Position = value;
     }
 
+    public override int ReadTimeout
+    {
+        get => _stream.ReadTimeout;
+        set => _stream.ReadTimeout = value;
+    }
+
+    public override int WriteTimeout
+    {
+        get => _stream.WriteTimeout;
+        set => _stream.WriteTimeout = value;
+    }
+
     public override void Flush()
         => _stream.Flush();
 

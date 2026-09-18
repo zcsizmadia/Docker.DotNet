@@ -172,3 +172,63 @@ internal sealed class RecordingStream : Stream
         return default;
     }
 }
+/// <summary>
+/// A stream that supports timeouts, used to verify that the wrapper streams forward the timeout
+/// properties rather than reporting support and then throwing.
+/// </summary>
+internal sealed class TimeoutCapableStream : Stream
+{
+    private int _readTimeout = 1000;
+
+    private int _writeTimeout = 2000;
+
+    public override bool CanRead
+        => true;
+
+    public override bool CanSeek
+        => false;
+
+    public override bool CanWrite
+        => true;
+
+    public override bool CanTimeout
+        => true;
+
+    public override int ReadTimeout
+    {
+        get => _readTimeout;
+        set => _readTimeout = value;
+    }
+
+    public override int WriteTimeout
+    {
+        get => _writeTimeout;
+        set => _writeTimeout = value;
+    }
+
+    public override long Length
+        => throw new NotSupportedException();
+
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override void Flush()
+    {
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+        => 0;
+
+    public override long Seek(long offset, SeekOrigin origin)
+        => throw new NotSupportedException();
+
+    public override void SetLength(long value)
+        => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+    }
+}

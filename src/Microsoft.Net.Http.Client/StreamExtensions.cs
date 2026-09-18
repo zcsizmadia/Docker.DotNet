@@ -10,7 +10,14 @@ internal static class StreamExtensions
 {
     public static ValueTask<int> ReadAsync(this Stream stream, Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        if (MemoryMarshal.TryGetArray<byte>(buffer, out var segment))
+        // An empty Memory<byte> reports an underlying array of null, which the byte[] overload
+        // rejects. A zero length read is a no-op, so answer it here.
+        if (buffer.IsEmpty)
+        {
+            return new ValueTask<int>(0);
+        }
+
+        if (MemoryMarshal.TryGetArray<byte>(buffer, out var segment) && segment.Array is not null)
         {
             return new ValueTask<int>(stream.ReadAsync(segment.Array!, segment.Offset, segment.Count, cancellationToken));
         }
@@ -20,7 +27,13 @@ internal static class StreamExtensions
 
     public static ValueTask WriteAsync(this Stream stream, ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        if (MemoryMarshal.TryGetArray(buffer, out var segment))
+        // See the note in ReadAsync above.
+        if (buffer.IsEmpty)
+        {
+            return default;
+        }
+
+        if (MemoryMarshal.TryGetArray(buffer, out var segment) && segment.Array is not null)
         {
             return new ValueTask(stream.WriteAsync(segment.Array!, segment.Offset, segment.Count, cancellationToken));
         }

@@ -56,6 +56,18 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
         set => throw new NotSupportedException();
     }
 
+    public override int ReadTimeout
+    {
+        get => _inner.ReadTimeout;
+        set => _inner.ReadTimeout = value;
+    }
+
+    public override int WriteTimeout
+    {
+        get => _inner.WriteTimeout;
+        set => _inner.WriteTimeout = value;
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)

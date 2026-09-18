@@ -12,7 +12,10 @@ internal sealed class ChunkedWriteStream : Stream
 
     private readonly Stream _inner;
 
-    // Writes are sequential, so a single reusable header buffer per stream is sufficient.
+    // A single reusable header buffer per stream, rather than one array per chunk. Stream does not
+    // guarantee thread safety for instance members, and this class is only ever driven by one
+    // writer that awaits each write before starting the next, so the buffer cannot be overwritten
+    // while an earlier write is still reading from it.
     private readonly byte[] _chunkHeader = new byte[MaxChunkHeaderLength];
 
     public ChunkedWriteStream(Stream stream)
