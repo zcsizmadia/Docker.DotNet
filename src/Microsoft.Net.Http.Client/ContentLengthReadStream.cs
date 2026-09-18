@@ -93,7 +93,33 @@ internal sealed class ContentLengthReadStream : Stream
         return read;
     }
 
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => ReadAsyncCore(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+    {
+        if (_disposed)
+        {
+            return 0;
+        }
+
+        if (_bytesRemaining == 0)
+        {
+            return 0;
+        }
+
+        int toRead = (int)Math.Min(buffer.Length, _bytesRemaining);
+        int read = _inner.Read(buffer.Slice(0, toRead));
+        UpdateBytesRemaining(read);
+        return read;
+    }
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => ReadAsyncCore(buffer, cancellationToken);
+#endif
+
+    private async ValueTask<int> ReadAsyncCore(Memory<byte> buffer, CancellationToken cancellationToken)
     {
         // TODO: Validate args
         if (_disposed)
@@ -107,8 +133,9 @@ internal sealed class ContentLengthReadStream : Stream
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        int toRead = (int)Math.Min(count, _bytesRemaining);
-        int read = await _inner.ReadAsync(buffer, offset, toRead, cancellationToken);
+        int toRead = (int)Math.Min(buffer.Length, _bytesRemaining);
+        int read = await _inner.ReadAsync(buffer.Slice(0, toRead), cancellationToken)
+            .ConfigureAwait(false);
         UpdateBytesRemaining(read);
         return read;
     }
@@ -133,6 +160,16 @@ internal sealed class ContentLengthReadStream : Stream
             _inner.Dispose();
         }
     }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override async ValueTask DisposeAsync()
+    {
+        await _inner.DisposeAsync()
+            .ConfigureAwait(false);
+
+        GC.SuppressFinalize(this);
+    }
+#endif
 
     private void CheckDisposed()
     {

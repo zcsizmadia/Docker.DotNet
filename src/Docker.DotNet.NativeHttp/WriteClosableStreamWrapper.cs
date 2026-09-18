@@ -13,6 +13,9 @@ internal sealed class WriteClosableStreamWrapper(Stream stream) : WriteClosableS
     public override bool CanWrite
         => _stream.CanWrite;
 
+    public override bool CanTimeout
+        => _stream.CanTimeout;
+
     public override bool CanCloseWrite
         => true;
 
@@ -28,8 +31,22 @@ internal sealed class WriteClosableStreamWrapper(Stream stream) : WriteClosableS
     public override void Flush()
         => _stream.Flush();
 
+    public override Task FlushAsync(CancellationToken cancellationToken)
+        => _stream.FlushAsync(cancellationToken);
+
     public override int Read(byte[] buffer, int offset, int count)
         => _stream.Read(buffer, offset, count);
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => _stream.ReadAsync(buffer, offset, count, cancellationToken);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+        => _stream.Read(buffer);
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => _stream.ReadAsync(buffer, cancellationToken);
+#endif
 
     public override long Seek(long offset, SeekOrigin origin)
         => _stream.Seek(offset, origin);
@@ -39,6 +56,17 @@ internal sealed class WriteClosableStreamWrapper(Stream stream) : WriteClosableS
 
     public override void Write(byte[] buffer, int offset, int count)
         => _stream.Write(buffer, offset, count);
+
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => _stream.WriteAsync(buffer, offset, count, cancellationToken);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _stream.Write(buffer);
+
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        => _stream.WriteAsync(buffer, cancellationToken);
+#endif
 
     public override void CloseWrite()
         => _stream.Close();
@@ -52,4 +80,14 @@ internal sealed class WriteClosableStreamWrapper(Stream stream) : WriteClosableS
 
         base.Dispose(disposing);
     }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override async ValueTask DisposeAsync()
+    {
+        await _stream.DisposeAsync()
+            .ConfigureAwait(false);
+
+        GC.SuppressFinalize(this);
+    }
+#endif
 }

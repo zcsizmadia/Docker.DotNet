@@ -21,6 +21,8 @@
     <ProjectReference Include="..\..\src\Docker.DotNet\Docker.DotNet.csproj" />
     <ProjectReference Include="..\..\src\Docker.DotNet.BasicAuth\Docker.DotNet.BasicAuth.csproj" />
     <ProjectReference Include="..\..\src\Docker.DotNet.X509\Docker.DotNet.X509.csproj" />
+    <!-- Referenced directly so that the internal stream implementations can be unit tested. -->
+    <ProjectReference Include="..\..\src\Microsoft.Net.Http.Client\Microsoft.Net.Http.Client.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
@@ -46,6 +48,7 @@
     <Using Include="Docker.DotNet.X509" />
     <Using Include="Microsoft.Extensions.Logging" />
     <Using Include="Microsoft.Extensions.Logging.Abstractions" />
+    <Using Include="Microsoft.Net.Http.Client" />
     <Using Include="Xunit" />
     <Using Include="Xunit.Sdk" />
     <Using Include="Xunit.v3" />

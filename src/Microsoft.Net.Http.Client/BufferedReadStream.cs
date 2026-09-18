@@ -60,10 +60,7 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
     {
         if (disposing)
         {
-            if (Interlocked.Exchange(ref _bufferRefCount, 0) == 1)
-            {
-                ArrayPool<byte>.Shared.Return(_buffer);
-            }
+            ReturnBuffer();
 
             _readLineBuffer?.Dispose();
 
@@ -73,6 +70,20 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
         base.Dispose(disposing);
     }
 
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override async ValueTask DisposeAsync()
+    {
+        ReturnBuffer();
+
+        _readLineBuffer?.Dispose();
+
+        await _inner.DisposeAsync()
+            .ConfigureAwait(false);
+
+        GC.SuppressFinalize(this);
+    }
+#endif
+
     public override void Flush()
         => _inner.Flush();
 
@@ -81,7 +92,7 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        int read = ReadBuffer(buffer, offset, count);
+        int read = ReadBuffer(buffer.AsSpan(offset, count));
         if (read > 0)
         {
             return read;
@@ -92,7 +103,7 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
 
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
-        int read = ReadBuffer(buffer, offset, count);
+        int read = ReadBuffer(buffer.AsSpan(offset, count));
         if (read > 0)
         {
             return Task.FromResult(read);
@@ -100,6 +111,30 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
 
         return _inner.ReadAsync(buffer, offset, count, cancellationToken);
     }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+    {
+        int read = ReadBuffer(buffer);
+        if (read > 0)
+        {
+            return read;
+        }
+
+        return _inner.Read(buffer);
+    }
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        int read = ReadBuffer(buffer.Span);
+        if (read > 0)
+        {
+            return new ValueTask<int>(read);
+        }
+
+        return _inner.ReadAsync(buffer, cancellationToken);
+    }
+#endif
 
     public override long Seek(long offset, SeekOrigin origin)
         => throw new NotSupportedException();
@@ -112,6 +147,14 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
 
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         => _inner.WriteAsync(buffer, offset, count, cancellationToken);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _inner.Write(buffer);
+
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        => _inner.WriteAsync(buffer, cancellationToken);
+#endif
 
     public override void CloseWrite()
     {
@@ -168,7 +211,7 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
             {
                 _bufferOffset = 0;
 
-                _bufferCount = await _inner.ReadAsync(_buffer, 0, _buffer.Length, cancellationToken)
+                _bufferCount = await _inner.ReadAsync(_buffer.AsMemory(), cancellationToken)
                     .ConfigureAwait(false);
 
                 if (_bufferCount == 0)
@@ -231,12 +274,12 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
         return Encoding.ASCII.GetString(_readLineBuffer.GetBuffer(), 0, (int)_readLineBuffer.Length);
     }
 
-    private int ReadBuffer(byte[] buffer, int offset, int count)
+    private int ReadBuffer(Span<byte> destination)
     {
         if (_bufferCount > 0)
         {
-            int toCopy = Math.Min(_bufferCount, count);
-            Buffer.BlockCopy(_buffer, _bufferOffset, buffer, offset, toCopy);
+            int toCopy = Math.Min(_bufferCount, destination.Length);
+            _buffer.AsSpan(_bufferOffset, toCopy).CopyTo(destination);
             _bufferOffset += toCopy;
             _bufferCount -= toCopy;
             return toCopy;
@@ -250,7 +293,7 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
         if (_bufferCount > 0)
         {
             int toCopy = Math.Min(_bufferCount, (int)toPeek);
-            Buffer.BlockCopy(_buffer, _bufferOffset, buffer, 0, toCopy);
+            _buffer.AsSpan(_bufferOffset, toCopy).CopyTo(buffer);
             peeked = (uint)toCopy;
             available = (uint)_bufferCount;
             remaining = available - peeked;
@@ -261,5 +304,13 @@ internal sealed class BufferedReadStream : WriteClosableStream, IPeekableStream
         available = 0;
         remaining = 0;
         return 0;
+    }
+
+    private void ReturnBuffer()
+    {
+        if (Interlocked.Exchange(ref _bufferRefCount, 0) == 1)
+        {
+            ArrayPool<byte>.Shared.Return(_buffer);
+        }
     }
 }

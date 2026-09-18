@@ -55,6 +55,14 @@ internal sealed class DockerPipeStream : WriteClosableStream, IPeekableStream
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         => _stream.ReadAsync(buffer, offset, count, cancellationToken);
 
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+        => _stream.Read(buffer);
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => _stream.ReadAsync(buffer, cancellationToken);
+#endif
+
     public bool Peek(byte[] buffer, uint toPeek, out uint peeked, out uint available, out uint remaining)
     {
         peeked = 0;
@@ -87,6 +95,14 @@ internal sealed class DockerPipeStream : WriteClosableStream, IPeekableStream
 
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         => _stream.WriteAsync(buffer, offset, count, cancellationToken);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _stream.Write(buffer);
+
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        => _stream.WriteAsync(buffer, cancellationToken);
+#endif
 
     public override void CloseWrite()
     {
@@ -128,4 +144,16 @@ internal sealed class DockerPipeStream : WriteClosableStream, IPeekableStream
             _stream.Dispose();
         }
     }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override async ValueTask DisposeAsync()
+    {
+        _event.Dispose();
+
+        await _stream.DisposeAsync()
+            .ConfigureAwait(false);
+
+        GC.SuppressFinalize(this);
+    }
+#endif
 }

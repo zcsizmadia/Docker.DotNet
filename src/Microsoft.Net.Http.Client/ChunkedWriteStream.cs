@@ -2,9 +2,18 @@ namespace Microsoft.Net.Http.Client;
 
 internal sealed class ChunkedWriteStream : Stream
 {
-    private static readonly byte[] EndOfContentBytes = Encoding.ASCII.GetBytes("0\r\n\r\n");
+    // A zero length chunk, followed by an empty trailer section, terminates the chunked body.
+    private static readonly ReadOnlyMemory<byte> EndOfContentBytes = "0\r\n\r\n"u8.ToArray();
+
+    private static readonly ReadOnlyMemory<byte> ChunkFooterBytes = "\r\n"u8.ToArray();
+
+    // The longest hexadecimal representation of a positive 32-bit chunk size, followed by CRLF.
+    private const int MaxChunkHeaderLength = 8 + 2;
 
     private readonly Stream _inner;
+
+    // Writes are sequential, so a single reusable header buffer per stream is sufficient.
+    private readonly byte[] _chunkHeader = new byte[MaxChunkHeaderLength];
 
     public ChunkedWriteStream(Stream stream)
     {
@@ -47,31 +56,55 @@ internal sealed class ChunkedWriteStream : Stream
     public override void Write(byte[] buffer, int offset, int count)
         => throw new NotSupportedException();
 
-    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => WriteAsyncCore(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+        => throw new NotSupportedException();
+
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => throw new NotSupportedException();
+
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        => WriteAsyncCore(buffer, cancellationToken);
+#endif
+
+    public Task EndContentAsync(CancellationToken cancellationToken)
+        => _inner.WriteAsync(EndOfContentBytes, cancellationToken).AsTask();
+
+    private async ValueTask WriteAsyncCore(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
     {
-        if (count == 0)
+        if (buffer.IsEmpty)
         {
             return;
         }
 
-        const string crlf = "\r\n";
+        var chunkHeaderLength = FormatChunkHeader(buffer.Length);
 
-        var chunkHeader = count.ToString("X") + crlf;
-        var headerBytes = Encoding.ASCII.GetBytes(chunkHeader);
-
-        // Write the chunk header
-        await _inner.WriteAsync(headerBytes, 0, headerBytes.Length, cancellationToken)
+        // Write the chunk header (the chunk size in hexadecimal, followed by CRLF)
+        await _inner.WriteAsync(_chunkHeader.AsMemory(0, chunkHeaderLength), cancellationToken)
             .ConfigureAwait(false);
 
         // Write the chunk data
-        await _inner.WriteAsync(buffer, offset, count, cancellationToken)
+        await _inner.WriteAsync(buffer, cancellationToken)
             .ConfigureAwait(false);
 
         // Write the chunk footer (CRLF)
-        await _inner.WriteAsync(headerBytes, headerBytes.Length - 2, 2, cancellationToken)
+        await _inner.WriteAsync(ChunkFooterBytes, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public Task EndContentAsync(CancellationToken cancellationToken)
-        => _inner.WriteAsync(EndOfContentBytes, 0, EndOfContentBytes.Length, cancellationToken);
+    private int FormatChunkHeader(int chunkLength)
+    {
+        if (!Utf8Formatter.TryFormat(chunkLength, _chunkHeader, out var bytesWritten, new StandardFormat('X')))
+        {
+            throw new InvalidOperationException($"Unable to format a chunk header for a chunk of {chunkLength} bytes.");
+        }
+
+        _chunkHeader[bytesWritten++] = (byte)'\r';
+        _chunkHeader[bytesWritten++] = (byte)'\n';
+
+        return bytesWritten;
+    }
 }

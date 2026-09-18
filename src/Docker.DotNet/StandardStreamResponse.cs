@@ -24,6 +24,9 @@ internal sealed class StandardStreamResponse : Stream
     public override bool CanWrite
         => _stream.CanWrite;
 
+    public override bool CanTimeout
+        => _stream.CanTimeout;
+
     public override long Length
         => _stream.Length;
 
@@ -39,6 +42,11 @@ internal sealed class StandardStreamResponse : Stream
     public override int Read(byte[] buffer, int offset, int count)
         => _stream.Read(buffer, offset, count);
 
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+        => _stream.Read(buffer);
+#endif
+
     public override long Seek(long offset, SeekOrigin origin)
         => _stream.Seek(offset, origin);
 
@@ -47,6 +55,11 @@ internal sealed class StandardStreamResponse : Stream
 
     public override void Write(byte[] buffer, int offset, int count)
         => _stream.Write(buffer, offset, count);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _stream.Write(buffer);
+#endif
 
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         => _stream.ReadAsync(buffer, offset, count, cancellationToken);
@@ -77,4 +90,17 @@ internal sealed class StandardStreamResponse : Stream
 
         base.Dispose(disposing);
     }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override async ValueTask DisposeAsync()
+    {
+        await _stream.DisposeAsync()
+            .ConfigureAwait(false);
+
+        // HttpResponseMessage does not implement IAsyncDisposable.
+        _response.Dispose();
+
+        GC.SuppressFinalize(this);
+    }
+#endif
 }

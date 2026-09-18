@@ -52,7 +52,38 @@ internal sealed class ChunkedReadStream : Stream
     public override int Read(byte[] buffer, int offset, int count)
         => throw new NotSupportedException();
 
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => ReadAsyncCore(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override int Read(Span<byte> buffer)
+        => throw new NotSupportedException();
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => ReadAsyncCore(buffer, cancellationToken);
+#endif
+
+    public override long Seek(long offset, SeekOrigin origin)
+        => throw new NotSupportedException();
+
+    public override void SetLength(long value)
+        => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count)
+        => _inner.Write(buffer, offset, count);
+
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => _inner.WriteAsync(buffer, offset, count, cancellationToken);
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    public override void Write(ReadOnlySpan<byte> buffer)
+        => _inner.Write(buffer);
+
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        => _inner.WriteAsync(buffer, cancellationToken);
+#endif
+
+    private async ValueTask<int> ReadAsyncCore(Memory<byte> buffer, CancellationToken cancellationToken)
     {
         if (_done)
         {
@@ -74,9 +105,9 @@ internal sealed class ChunkedReadStream : Stream
 
         if (_chunkBytesRemaining > 0)
         {
-            var remainingBytesCount = Math.Min(_chunkBytesRemaining, count);
+            var remainingBytesCount = Math.Min(_chunkBytesRemaining, buffer.Length);
 
-            readBytesCount = await _inner.ReadAsync(buffer, offset, remainingBytesCount, cancellationToken)
+            readBytesCount = await _inner.ReadAsync(buffer.Slice(0, remainingBytesCount), cancellationToken)
                 .ConfigureAwait(false);
 
             if (readBytesCount == 0)
@@ -107,16 +138,4 @@ internal sealed class ChunkedReadStream : Stream
 
         return readBytesCount;
     }
-
-    public override long Seek(long offset, SeekOrigin origin)
-        => throw new NotSupportedException();
-
-    public override void SetLength(long value)
-        => throw new NotSupportedException();
-
-    public override void Write(byte[] buffer, int offset, int count)
-        => _inner.Write(buffer, offset, count);
-
-    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        => _inner.WriteAsync(buffer, offset, count, cancellationToken);
 }

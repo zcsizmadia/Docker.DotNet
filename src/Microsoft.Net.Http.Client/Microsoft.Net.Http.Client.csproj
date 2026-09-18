@@ -8,6 +8,7 @@
   <ItemGroup>
     <Using Include="System" />
     <Using Include="System.Buffers" />
+    <Using Include="System.Buffers.Text" />
     <Using Include="System.Collections.Generic" />
     <Using Include="System.Globalization" />
     <Using Include="System.IO" />
@@ -18,6 +19,8 @@
     <Using Include="System.Net.Security" />
     <Using Include="System.Net.Sockets" />
     <Using Include="System.Reflection" />
+    <Using Include="System.Runtime.CompilerServices" />
+    <Using Include="System.Runtime.InteropServices" />
     <Using Include="System.Security" />
     <Using Include="System.Security.Authentication" />
     <Using Include="System.Security.Cryptography.X509Certificates" />
